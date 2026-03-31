@@ -17,6 +17,7 @@ const User = require('./models/User');
 
 const app = express();
 const server = http.createServer(app);
+app.set('trust proxy', 1);
 
 // Initialize Socket.io
 initSocket(server);
@@ -161,5 +162,8 @@ app.get('/', (req, res) => {
 });
 app.use(require('./middleware/errorMiddleware'));
 
+// 3. Port Logic for Render
 const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => console.log(`🚀 Hardened Server running on port ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Hardened Server live on port ${PORT}`);
+});
