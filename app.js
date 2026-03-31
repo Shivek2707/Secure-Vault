@@ -155,7 +155,10 @@ app.use('/api/files', require('./routes/fileRoutes'));
 app.get('/google139dc7e565d5c808.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'google139dc7e565d5c808.html'));
 });
-
+// Serve the Frontend
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 app.use(require('./middleware/errorMiddleware'));
 
 const PORT = process.env.PORT || 8080;
