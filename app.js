@@ -151,8 +151,9 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/notes', require('./routes/noteRoutes'));
 app.use('/api/files', require('./routes/fileRoutes'));
 
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+// Verification Route
+app.get('/Google search console.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'Google search console.html'));
 });
 
 app.use(require('./middleware/errorMiddleware'));
