@@ -25,6 +25,7 @@ app.disable('x-powered-by');
 connectDB();
 
 // Security Headers (Enhanced for WebSockets)
+// Security Headers (Hardened for Cloud Deployment)
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -33,7 +34,15 @@ app.use(
         scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://unpkg.com", "https://cdn.tailwindcss.com"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com", "https://fonts.googleapis.com"],
         imgSrc: ["'self'", "data:", "https://*.googleusercontent.com"],
-        connectSrc: ["'self'", "http://localhost:8080", "ws://localhost:8080", "wss://localhost:8080", "https://unpkg.com"],
+        // CRITICAL: Added your render URL to connectSrc
+        connectSrc: [
+            "'self'", 
+            "http://localhost:8080", 
+            "ws://localhost:8080", 
+            "https://your-app-name.onrender.com", 
+            "wss://your-app-name.onrender.com", 
+            "https://unpkg.com"
+        ],
       },
     },
   })
