@@ -163,7 +163,9 @@ app.get('/', (req, res) => {
 app.use(require('./middleware/errorMiddleware'));
 
 // 3. Port Logic for Render
-const PORT = process.env.PORT || 8080;
+// At the bottom of app.js
+const PORT = process.env.PORT || 10000; 
+
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Hardened Server live on port ${PORT}`);
 });
