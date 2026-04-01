@@ -7,9 +7,10 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      // DYNAMIC CALLBACK: Automatically switches between Local and Render
       callbackURL: process.env.NODE_ENV === 'production' 
-             ? "https://your-app-name.onrender.com/api/auth/google/callback" 
-             : "http://localhost:8080/api/auth/google/callback",
+        ? "https://secure-vault-p44c.onrender.com/api/auth/google/callback" 
+        : "http://localhost:8080/api/auth/google/callback",
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
