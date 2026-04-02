@@ -1,8 +1,15 @@
 const mongoose = require('mongoose');
 
 const connectDB = async () => {
+    // This LOG is crucial - it will tell us what the server sees
+    console.log("DEBUG: Attempting connection with URI:", process.env.MONGO_URI ? "FOUND" : "UNDEFINED");
+
     try {
-        await mongoose.connect(process.env.MONGODB_URI);
+        const uri = process.env.MONGO_URI;
+        if (!uri) {
+            throw new Error("MONGO_URI is missing from process.env");
+        }
+        await mongoose.connect(uri);
         console.log('✅ MongoDB Connected Safely');
     } catch (err) {
         console.error('❌ Connection Error:', err.message);
