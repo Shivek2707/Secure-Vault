@@ -7,7 +7,6 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      // DYNAMIC CALLBACK: Automatically switches between Local and Render
       callbackURL: process.env.NODE_ENV === 'production' 
         ? "https://secure-vault-p44c.onrender.com/api/auth/google/callback" 
         : "http://localhost:8080/api/auth/google/callback",
@@ -16,32 +15,45 @@ passport.use(
       try {
         const email = profile.emails[0].value.toLowerCase();
         
-        // 1. Search for the user by email (since you pre-add them by email)
-        let user = await User.findOne({ email: email });
+        // 1. Find User in Cloud DB
+        let user = await User.findOne({ email });
 
-        // 2. HARDENED SHIELD: Reject if not pre-authorized
-        if (!user || user.status !== 'approved') {
-          console.log(`[AUTH REJECTED] Unauthorized login attempt: ${email}`);
-          // Returning false tells Passport the authentication failed
-          return done(null, false, { message: 'Neural ID not found in whitelist.' });
+        // 2. ROOT_ADMIN Bypass
+        if (email === 'shiveksingh43.gmail.com') { // Double-check this matches your email exactly
+            if (!user) {
+                user = await User.create({
+                    email,
+                    name: profile.displayName,
+                    role: 'admin',
+                    status: 'approved',
+                    googleId: profile.id,
+                    avatar: profile.photos[0]?.value // Useful for the UI
+                });
+            }
+            return done(null, user);
         }
 
-        // 3. If pre-authorized, update their record with real Google data
-        // This handles users who were added manually and are logging in for the first time
-        user.googleId = profile.id;
-        user.name = profile.displayName;
-        user.avatar = profile.photos[0].value;
-        
-        // Ensure status remains approved
-        user.status = 'approved'; 
-        
-        await user.save();
-        
-        console.log(`[AUTH SUCCESS] Operator synced: ${user.email}`);
+        // 3. THE USER GATEKEEPER
+        // If user doesn't exist, create them in QUARANTINE status first
+        if (!user) {
+            user = await User.create({
+                email,
+                name: profile.displayName,
+                role: 'user',
+                status: 'quarantine', // Default to blocked
+                googleId: profile.id,
+                avatar: profile.photos[0]?.value
+            });
+            console.log(`[SECURITY] New User Registered (Quarantined): ${email}`);
+            return done(null, user); 
+        }
+
+        // 4. Return the user regardless of status 
+        // (The Frontend/Middleware will handle the redirect if status === 'quarantine')
         return done(null, user);
 
       } catch (err) {
-        console.error("[PASSPORT ERROR]", err);
+        console.error("Passport Strategy Error:", err);
         return done(err, null);
       }
     }
