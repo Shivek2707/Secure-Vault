@@ -68,50 +68,25 @@
                 }
             }, []);
 
-            const handleInit = async (token) => {
-                const headers = { 'Authorization': `Bearer ${token}` };
-                try {
-                    const profRes = await fetch(`${API_BASE}/api/users/profile`, { headers });
-                    const prof = await profRes.json();
-                    setUser(prof);
-
-                    if (prof.email !== ROOT_EMAIL && prof.status !== 'approved') {
-                        setActivePage('quarantine');
-                        initSocket(token);
-                        return;
-                    } else {
-                        setActivePage('vault'); 
-                    }
-
-                    const [nts, fls] = await Promise.all([
-                        fetch(`${API_BASE}/api/notes`, { headers }).then(r => r.json()),
-                        fetch(`${API_BASE}/api/files`, { headers }).then(r => r.json())
-                    ]);
-                    setNotes(nts.data || []);
-                    setFiles(fls.data || []);
-
-                    if (prof.email === ROOT_EMAIL) {
-                        const usersRes = await fetch(`${API_BASE}/api/admin/users`, { headers }).then(r => r.json());
-                        setAllUsers(usersRes.data || []);
-                    }
-
-                    initSocket(token);
-                } catch (e) { console.error("Identity sync failure", e); }
-            };
-
             const initSocket = (token) => {
                 if (!socketRef.current && window.io) {
-                    socketRef.current = io(API_BASE, { auth: { token } });
+                    socketRef.current = io(API_BASE, { 
+                        auth: { token },
+                        transports: ['websocket', 'polling'],
+                        secure: true,
+                        reconnection: true
+                    });
+
                     socketRef.current.on('connect', () => setSocketStatus('online'));
+                    
                     socketRef.current.on('receive_message', (msg) => setMessages(prev => [...prev, msg]));
                     
-                    socketRef.current.on('access_granted', () => {
-                        console.log("Whitelisting signal detected. Reinitializing...");
+                    socketRef.current.on('identity_approved', () => {
                         if (socketRef.current) {
                             socketRef.current.disconnect();
                             socketRef.current = null;
                         }
-                        setTimeout(() => handleInit(token), 800);
+                        setTimeout(() => handleInit(localStorage.getItem('token')), 500);
                     });
 
                     socketRef.current.on('user_blocked', () => { 
@@ -120,6 +95,40 @@
                     });
                 }
             }
+
+            const handleInit = async (token) => {
+                const headers = { 'Authorization': `Bearer ${token}` };
+                try {
+                    const profRes = await fetch(`${API_BASE}/api/users/profile`, { headers });
+                    if (!profRes.ok) throw new Error("Unauthorized");
+                    
+                    const prof = await profRes.json();
+                    setUser(prof);
+
+                    if (prof.email === ROOT_EMAIL || prof.status === 'approved') {
+                        setActivePage('vault'); 
+                        const [nts, fls] = await Promise.all([
+                            fetch(`${API_BASE}/api/notes`, { headers }).then(r => r.json()),
+                            fetch(`${API_BASE}/api/files`, { headers }).then(r => r.json())
+                        ]);
+                        setNotes(nts.data || []);
+                        setFiles(fls.data || []);
+
+                        if (prof.email === ROOT_EMAIL) {
+                            const usersRes = await fetch(`${API_BASE}/api/admin/users`, { headers }).then(r => r.json());
+                            setAllUsers(usersRes.data || []);
+                        }
+                    } else {
+                        setActivePage('quarantine');
+                    }
+
+                    initSocket(token);
+                } catch (e) { 
+                    console.error("Identity sync failure", e); 
+                    localStorage.clear();
+                    setIsLoggedIn(false);
+                }
+            };
 
             const handleUserAction = async (userId, action) => {
                 const token = localStorage.getItem('token');
@@ -265,7 +274,6 @@
 
                         {activePage === 'admin' && isAdmin && (
                             <div className="space-y-12 max-w-5xl mx-auto slide-up">
-                                {/* PHASE 2: MANUAL WHITELIST PANEL */}
                                 <section className="glass-panel p-8 rounded-3xl border-emerald-500/20 mb-10">
                                     <h3 className="cyber-header text-[10px] text-emerald-400 mb-6 font-bold flex items-center gap-2">
                                         <i className="fa-solid fa-user-plus"></i> AUTHORIZED_NEURAL_UPLINK
@@ -327,9 +335,6 @@
                                             <div className="flex items-center gap-2 mb-1">
                                                 <span className="text-[8px] font-black uppercase text-gray-500">{m.senderName}</span>
                                                 <span className="user-id-tag">{m.senderEmail}</span>
-                                                {isAdmin && m.senderEmail !== user.email && (
-                                                    <button onClick={() => handleUserAction(m.senderEmail, 'block')} className="text-red-500 hover:scale-110 ml-1 text-[10px]"><i className="fa-solid fa-ban"></i></button>
-                                                )}
                                             </div>
                                             <div className={`max-w-[70%] p-4 rounded-2xl text-xs leading-relaxed ${m.senderEmail === user?.email ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'bg-white/5 border border-white/5 text-gray-300'}`}>
                                                 {m.message || m.text}

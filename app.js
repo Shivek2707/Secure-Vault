@@ -17,16 +17,17 @@ const User = require('./models/User');
 
 const app = express();
 const server = http.createServer(app);
+
+// CRITICAL for Render/Proxies
 app.set('trust proxy', 1);
 
-// Initialize Socket.io
+// 1. Initialize Socket.io with the HTTP Server
 initSocket(server);
 
 app.disable('x-powered-by');
 connectDB();
 
-// Security Headers (Enhanced for WebSockets)
-// Security Headers (Hardened for Cloud Deployment)
+// 2. Hardened Security Headers (Fixed for Cloud WebSockets)
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -35,14 +36,14 @@ app.use(
         scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://unpkg.com", "https://cdn.tailwindcss.com"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com", "https://fonts.googleapis.com"],
         imgSrc: ["'self'", "data:", "https://*.googleusercontent.com"],
-        // CRITICAL: Added your render URL to connectSrc
+        // Fix: Allow Socket.io and API connections to the Render domain
         connectSrc: [
-            "'self'", 
-            "http://localhost:8080", 
-            "ws://localhost:8080", 
-            "https://your-app-name.onrender.com", 
-            "wss://your-app-name.onrender.com", 
-            "https://unpkg.com"
+          "'self'", 
+          "http://localhost:8080", 
+          "ws://localhost:8080", 
+          "https://secure-vault-p44c.onrender.com", 
+          "wss://secure-vault-p44c.onrender.com", // Secure WebSocket for production
+          "https://unpkg.com"
         ],
       },
     },
@@ -53,7 +54,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Optimized Rate Limiting for Development
+// Optimized Rate Limiting
 const limiter = rateLimit({
     windowMs: 1 * 60 * 1000, 
     max: 5000,               
@@ -64,10 +65,9 @@ app.use(passport.initialize());
 app.use('/api', limiter); 
 
 // --- ADMIN ROUTES ---
-
 const ROOT_EMAIL = 'shiveksingh43@gmail.com';
 
-// 1. Manually add a user to the whitelist (NEW LOGIC)
+// 1. Neural Whitelist Logic
 app.post('/api/admin/whitelist', protect, async (req, res) => {
     try {
         if (req.user.email !== ROOT_EMAIL) {
@@ -78,20 +78,18 @@ app.post('/api/admin/whitelist', protect, async (req, res) => {
         if (!email) return res.status(400).json({ error: 'Email required' });
 
         const normalizedEmail = email.toLowerCase().trim();
-        
-        // Check if user already exists
         let user = await User.findOne({ email: normalizedEmail });
         
         if (user) {
             user.status = 'approved';
             await user.save();
         } else {
-            // Pre-create the user record so they are "approved" before they even login
             await User.create({
                 email: normalizedEmail,
-                name: 'Authorized Operator', // Temporary name until Google Login
+                name: 'Authorized Operator',
                 status: 'approved',
-                googleId: 'pre_authorized'   // Flag to indicate pre-approval
+                role: 'user', // Ensure default role is user
+                googleId: 'pre_authorized'
             });
         }
         
@@ -102,7 +100,7 @@ app.post('/api/admin/whitelist', protect, async (req, res) => {
     }
 });
 
-// 2. Get List of all users
+// 2. User Directory
 app.get('/api/admin/users', protect, async (req, res) => {
     try {
         if (req.user.email !== ROOT_EMAIL) {
@@ -115,7 +113,7 @@ app.get('/api/admin/users', protect, async (req, res) => {
     }
 });
 
-// 3. Revoke/Purge user (Action: 'remove')
+// 3. User Revocation
 app.post('/api/admin/users/:id', protect, async (req, res) => {
     try {
         if (req.user.email !== ROOT_EMAIL) {
@@ -130,7 +128,7 @@ app.post('/api/admin/users/:id', protect, async (req, res) => {
             
             console.log(`[ADMIN] User purged: ${deletedUser.email}`);
             
-            // If they are currently logged in, signal their socket to boot them
+            // Signal the user's browser to terminate immediately
             try {
                 const ioInstance = getIO();
                 ioInstance.to(req.params.id).emit('user_blocked');
@@ -152,19 +150,20 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/notes', require('./routes/noteRoutes'));
 app.use('/api/files', require('./routes/fileRoutes'));
 
-// Verification Route
+// Static File Handling
 app.get('/google139dc7e565d5c808.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'google139dc7e565d5c808.html'));
+    res.sendFile(path.join(process.cwd(), 'google139dc7e565d5c808.html'));
 });
-// Serve the Frontend
+
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.sendFile(path.join(process.cwd(), 'index.html'));
 });
+
+// Final Error Middleware
 app.use(require('./middleware/errorMiddleware'));
 
-// 3. Port Logic for Render
-// At the bottom of app.js
-const PORT = process.env.PORT || 10000; 
+// 3. Dynamic Port Logic for Cloud Deployment
+const PORT = process.env.PORT || 8080; 
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Hardened Server live on port ${PORT}`);
