@@ -68,6 +68,7 @@ app.use('/api', limiter);
 const ROOT_EMAIL = 'shiveksingh43@gmail.com';
 
 // 1. Neural Whitelist Logic
+// --- ADMIN: WHITELIST OPERATOR ---
 app.post('/api/admin/whitelist', protect, async (req, res) => {
     try {
         if (req.user.email !== ROOT_EMAIL) {
@@ -78,24 +79,36 @@ app.post('/api/admin/whitelist', protect, async (req, res) => {
         if (!email) return res.status(400).json({ error: 'Email required' });
 
         const normalizedEmail = email.toLowerCase().trim();
+        
+        // 1. Check if user already exists in the system
         let user = await User.findOne({ email: normalizedEmail });
         
         if (user) {
+            // Case A: User exists (likely sitting on the "Quarantine" screen)
             user.status = 'approved';
+            user.role = 'user'; // Ensure they aren't accidentally an admin
             await user.save();
+
+            // PUSH SIGNAL: Tell their browser to flip to the Vault
+            const ioInstance = getIO();
+            ioInstance.to(user._id.toString()).emit('identity_approved');
+            
+            console.log(`[WHITELIST] Existing user approved: ${normalizedEmail}`);
         } else {
+            // Case B: Brand new user (pre-authorizing them)
             await User.create({
                 email: normalizedEmail,
                 name: 'Authorized Operator',
                 status: 'approved',
-                role: 'user', // Ensure default role is user
-                googleId: 'pre_authorized'
+                role: 'user',
+                googleId: 'pre_authorized' 
             });
+            console.log(`[WHITELIST] New user pre-authorized: ${normalizedEmail}`);
         }
         
-        console.log(`[WHITELIST] Access granted for: ${normalizedEmail}`);
-        res.json({ success: true, message: `Neural access granted for ${normalizedEmail}` });
+        res.json({ success: true, message: `Access granted for ${normalizedEmail}` });
     } catch (err) {
+        console.error("Whitelist error:", err);
         res.status(500).json({ error: 'Failed to whitelist email' });
     }
 });

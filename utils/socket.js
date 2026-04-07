@@ -6,16 +6,15 @@ let io; // Hold the instance globally in this file
 const initSocket = (server) => {
     io = new Server(server, {
         cors: { 
-            // CRITICAL: Replace "*" with your actual Render URL for production security
-            origin: process.env.NODE_ENV === 'production' 
-                ? "https://secure-vault-p44c.onrender.com" 
-                : "http://localhost:8080",
+            origin: "https://secure-vault-p44c.onrender.com",
             methods: ["GET", "POST"],
             credentials: true
         },
-        // Force these transports to ensure Render's proxy doesn't drop the link
-        transports: ["websocket", "polling"]
+        // CHANGE: Allow polling to establish the link, then upgrade to websocket
+        transports: ["polling", "websocket"], 
+        allowEIO3: true // Backwards compatibility for older handshakes
     });
+    // ... rest of your code
 
     // Middleware: Auth check
     io.use((socket, next) => {
