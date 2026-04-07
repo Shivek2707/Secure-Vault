@@ -97,20 +97,22 @@
                 const pulseUrl = `${API_BASE}/api/users/profile?pulse=${Date.now()}`;
                 const headers = { 
                     'Authorization': `Bearer ${token}` ,
-                    'Cache-Control': 'no-cache', // Hardened header to prevent 304s
-                    'Pragma': 'no-cache'
+                    'Cache-Control': 'no-cache ,no-store, must-revalidate',
                 };
                 try {
                     const profRes = await fetch(pulseUrl, { headers });
                     
                     const prof = await profRes.json();
-                    console.log("LIVE_SYNC_REPORT:", prof.status);
+                    const currentStatus = String(prof.status || "").toLowerCase().trim();
+                    const currentEmail = String(prof.email || "").toLowerCase().trim();
+                    const adminEmail = String(ROOT_EMAIL || "").toLowerCase().trim();
+                    console.log("NEURAL_SYNC_STATUS:", currentStatus);
 
                     // FIXED GATEKEEPER LOGIC
-                    const isRoot = prof.email === ROOT_EMAIL;
-                    const isApproved = prof.status === 'approved';
+                    
 
-                    if (isRoot || isApproved) {
+                    if (currentEmail === adminEmail || currentStatus === 'approved') {
+                        console.log("ACCESS_GRANTED: Initializing Vault UI...");
                         setUser(prof);
                         setActivePage('vault'); 
                         const [nts, fls] = await Promise.all([
@@ -120,20 +122,19 @@
                         setNotes(nts.data || []);
                         setFiles(fls.data || []);
 
-                        if (isRoot) {
+                        if (currentEmail === adminEmail) {
                             const usersRes = await fetch(`${API_BASE}/api/admin/users`, { headers }).then(r => r.json());
                             setAllUsers(usersRes.data || []);
                         }
                     } else {
+                        console.log("ACCESS_DENIED: User is still Quarantined.");
                         setUser(prof);
                         setActivePage('quarantine');
                     }
 
                     initSocket(token);
                 } catch (e) { 
-                    console.error("Identity sync failure", e);
-                    localStorage.clear();
-                    setIsLoggedIn(false);
+                    console.error("Identity_Sync_Crash", e);
                 }
             };
 
@@ -219,10 +220,12 @@
                                     const token = localStorage.getItem('token');
                                     const res = await fetch(`${API_BASE}/api/users/profile?pulse=${Date.now()}`, { headers: { 'Authorization': `Bearer ${token}` } });
                                     const data = await res.json();
-                                    if (data.status === 'approved') {
+                                    const cleanStatus = String(data.status || "").toLowerCase().trim();
+                                    if (cleanStatus === 'approved') {
+                                        console.log("MATCH_FOUND: Forcing Portal Entry...");
                                         window.location.reload(); 
                                     } else {
-                                        alert("QUARANTINE_STILL_ACTIVE. Contact Root Admin.");
+                                        alert("QUARANTINE_STILL_ACTIVE: Server reports status as '" + data.status + "'");
                                     }
                                 }} 
                                 className="w-full bg-cyan-600/20 border border-cyan-500 text-cyan-300 py-3 rounded-2xl text-[10px] font-bold hover:bg-cyan-500 hover:text-black transition-all uppercase"
