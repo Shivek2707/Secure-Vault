@@ -94,23 +94,28 @@
             }
 
             const handleInit = async (token) => {
-                const headers = { 'Authorization': `Bearer ${token}` };
+                const pulseUrl = `${API_BASE}/api/users/profile?pulse=${Date.now()}`;
+                const headers = { 
+                    'Authorization': `Bearer ${token}` ,
+                    'Cache-Control': 'no-cache', // Hardened header to prevent 304s
+                    'Pragma': 'no-cache'
+                };
                 try {
-                    const profRes = await fetch(`${API_BASE}/api/users/profile`, { headers });
-                    if (!profRes.ok) throw new Error("Session Expired");
+                    const profRes = await fetch(pulseUrl, { headers });
                     
                     const prof = await profRes.json();
-                    setUser(prof);
+                    console.log("LIVE_SYNC_REPORT:", prof.status);
 
                     // FIXED GATEKEEPER LOGIC
                     const isRoot = prof.email === ROOT_EMAIL;
                     const isApproved = prof.status === 'approved';
 
                     if (isRoot || isApproved) {
+                        setUser(prof);
                         setActivePage('vault'); 
                         const [nts, fls] = await Promise.all([
-                            fetch(`${API_BASE}/api/notes`, { headers }).then(r => r.json()),
-                            fetch(`${API_BASE}/api/files`, { headers }).then(r => r.json())
+                            fetch(`${API_BASE}/api/notes?pulse=${Date.now()}`, { headers }).then(r => r.json()),
+                            fetch(`${API_BASE}/api/files?pulse=${Date.now()}`, { headers }).then(r => r.json())
                         ]);
                         setNotes(nts.data || []);
                         setFiles(fls.data || []);
@@ -120,6 +125,7 @@
                             setAllUsers(usersRes.data || []);
                         }
                     } else {
+                        setUser(prof);
                         setActivePage('quarantine');
                     }
 
@@ -211,7 +217,7 @@
                             <button 
                                 onClick={async () => {
                                     const token = localStorage.getItem('token');
-                                    const res = await fetch(`${API_BASE}/api/users/profile`, { headers: { 'Authorization': `Bearer ${token}` } });
+                                    const res = await fetch(`${API_BASE}/api/users/profile?pulse=${Date.now()}`, { headers: { 'Authorization': `Bearer ${token}` } });
                                     const data = await res.json();
                                     if (data.status === 'approved') {
                                         window.location.reload(); 

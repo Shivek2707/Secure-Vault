@@ -20,6 +20,11 @@ const server = http.createServer(app);
 
 // CRITICAL for Render/Proxies
 app.set('trust proxy', 1);
+// Add this in app.js before app.use('/api', ...)
+app.use((req, res, next) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    next();
+});
 
 // 1. Initialize Socket.io with the HTTP Server
 initSocket(server);
