@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secure-vault-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: secure-vault
+  template:
+    metadata:
+      labels:
+        app: secure-vault
+    spec:
+      containers:
+      - name: secure-vault
+        image: secure-vault:jenkins-latest
+        imagePullPolicy: Never # Crucial for Minikube local images
+        envFrom:
+        - secretRef:
+            name: vault-secrets
