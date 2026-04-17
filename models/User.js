@@ -8,7 +8,7 @@ const userSchema = new mongoose.Schema({
   // ADD THIS FIELD:
   status: {
     type: String,
-    enum: ['pending', 'approved'],
+    enum: ['pending','quarantine', 'approved'],
     default: 'pending' // Defaults to pending if not specified
   },
   role: { type: String, default: 'user' }
