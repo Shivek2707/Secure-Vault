@@ -19,7 +19,7 @@ passport.use(
         let user = await User.findOne({ email });
 
         // 2. ROOT_ADMIN Bypass
-        if (email === 'shiveksingh43@.gmail.com') { // Double-check this matches your email exactly
+        if (email === 'shiveksingh43.gmail.com') { // Double-check this matches your email exactly
             if (!user) {
                 user = await User.create({
                     email,
