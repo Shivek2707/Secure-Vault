@@ -18,6 +18,9 @@ const User = require('./models/User');
 const app = express();
 const server = http.createServer(app);
 
+const client = require('prom-client');
+const collectDefaultMetrics = client.collectDefaultMetrics;
+
 // CRITICAL for Render/Proxies
 app.set('trust proxy', 1);
 // Add this in app.js before app.use('/api', ...)
@@ -175,6 +178,12 @@ app.get('/google139dc7e565d5c808.html', (req, res) => {
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(process.cwd(), 'index.html'));
+});
+collectDefaultMetrics({ timeout: 5000 });
+
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', client.register.contentType);
+  res.end(await client.register.metrics());
 });
 
 // Final Error Middleware
