@@ -15,15 +15,27 @@ const { initSocket, getIO } = require('./utils/socket');
 const { protect } = require('./middleware/authMiddleware'); 
 const User = require('./models/User'); 
 
+// --- PROMETHEUS SETUP ---
+const client = require('prom-client');
+const register = new client.Registry();
+client.collectDefaultMetrics({ register });
+
+// Add custom metrics if needed (Optional)
+const httpRequestDurationMicroseconds = new client.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'code'],
+  buckets: [0.1, 0.3, 0.5, 0.7, 1, 3, 5, 10]
+});
+register.registerMetric(httpRequestDurationMicroseconds);
+// ------------------------
+
 const app = express();
 const server = http.createServer(app);
 
-const client = require('prom-client');
-const collectDefaultMetrics = client.collectDefaultMetrics;
-
 // CRITICAL for Render/Proxies
 app.set('trust proxy', 1);
-// Add this in app.js before app.use('/api', ...)
+
 app.use((req, res, next) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     next();
@@ -35,7 +47,7 @@ initSocket(server);
 app.disable('x-powered-by');
 connectDB();
 
-// 2. Hardened Security Headers (Fixed for Cloud WebSockets)
+// 2. Hardened Security Headers
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -44,13 +56,12 @@ app.use(
         scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://unpkg.com", "https://cdn.tailwindcss.com"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com", "https://fonts.googleapis.com"],
         imgSrc: ["'self'", "data:", "https://*.googleusercontent.com"],
-        // Fix: Allow Socket.io and API connections to the Render domain
         connectSrc: [
           "'self'", 
           "http://localhost:8080", 
           "ws://localhost:8080", 
           "https://secure-vault-p44c.onrender.com", 
-          "wss://secure-vault-p44c.onrender.com", // Secure WebSocket for production
+          "wss://secure-vault-p44c.onrender.com",
           "https://unpkg.com"
         ],
       },
@@ -72,11 +83,15 @@ const limiter = rateLimit({
 app.use(passport.initialize());
 app.use('/api', limiter); 
 
+// --- METRICS ENDPOINT ---
+app.get('/metrics', async (req, res) => {
+    res.setHeader('Content-Type', register.contentType);
+    res.send(await register.metrics());
+});
+
 // --- ADMIN ROUTES ---
 const ROOT_EMAIL = 'shiveksingh43@gmail.com';
 
-// 1. Neural Whitelist Logic
-// --- ADMIN: WHITELIST OPERATOR ---
 app.post('/api/admin/whitelist', protect, async (req, res) => {
     try {
         if (req.user.email !== ROOT_EMAIL) {
@@ -87,23 +102,15 @@ app.post('/api/admin/whitelist', protect, async (req, res) => {
         if (!email) return res.status(400).json({ error: 'Email required' });
 
         const normalizedEmail = email.toLowerCase().trim();
-        
-        // 1. Check if user already exists in the system
         let user = await User.findOne({ email: normalizedEmail });
         
         if (user) {
-            // Case A: User exists (likely sitting on the "Quarantine" screen)
             user.status = 'approved';
-            user.role = 'user'; // Ensure they aren't accidentally an admin
+            user.role = 'user'; 
             await user.save();
-
-            // PUSH SIGNAL: Tell their browser to flip to the Vault
             const ioInstance = getIO();
             ioInstance.to(user._id.toString()).emit('identity_approved');
-            
-            console.log(`[WHITELIST] Existing user approved: ${normalizedEmail}`);
         } else {
-            // Case B: Brand new user (pre-authorizing them)
             await User.create({
                 email: normalizedEmail,
                 name: 'Authorized Operator',
@@ -111,9 +118,7 @@ app.post('/api/admin/whitelist', protect, async (req, res) => {
                 role: 'user',
                 googleId: 'pre_authorized' 
             });
-            console.log(`[WHITELIST] New user pre-authorized: ${normalizedEmail}`);
         }
-        
         res.json({ success: true, message: `Access granted for ${normalizedEmail}` });
     } catch (err) {
         console.error("Whitelist error:", err);
@@ -121,7 +126,6 @@ app.post('/api/admin/whitelist', protect, async (req, res) => {
     }
 });
 
-// 2. User Directory
 app.get('/api/admin/users', protect, async (req, res) => {
     try {
         if (req.user.email !== ROOT_EMAIL) {
@@ -134,30 +138,21 @@ app.get('/api/admin/users', protect, async (req, res) => {
     }
 });
 
-// 3. User Revocation
 app.post('/api/admin/users/:id', protect, async (req, res) => {
     try {
         if (req.user.email !== ROOT_EMAIL) {
             return res.status(403).json({ error: 'Unauthorized' });
         }
-
         const { action } = req.body;
-
         if (action === 'remove') {
             const deletedUser = await User.findByIdAndDelete(req.params.id);
             if (!deletedUser) return res.status(404).json({ error: 'User not found' });
-            
-            console.log(`[ADMIN] User purged: ${deletedUser.email}`);
-            
-            // Signal the user's browser to terminate immediately
             try {
                 const ioInstance = getIO();
                 ioInstance.to(req.params.id).emit('user_blocked');
             } catch (e) {}
-
             return res.json({ success: true, message: "User purged from system" });
         }
-
         res.status(400).json({ error: 'Invalid action' });
     } catch (err) {
         console.error("Admin action error:", err);
@@ -171,7 +166,6 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/notes', require('./routes/noteRoutes'));
 app.use('/api/files', require('./routes/fileRoutes'));
 
-// Static File Handling
 app.get('/google139dc7e565d5c808.html', (req, res) => {
     res.sendFile(path.join(process.cwd(), 'google139dc7e565d5c808.html'));
 });
@@ -179,17 +173,10 @@ app.get('/google139dc7e565d5c808.html', (req, res) => {
 app.get('/', (req, res) => {
     res.sendFile(path.join(process.cwd(), 'index.html'));
 });
-collectDefaultMetrics({ timeout: 5000 });
-
-app.get('/metrics', async (req, res) => {
-  res.set('Content-Type', client.register.contentType);
-  res.end(await client.register.metrics());
-});
 
 // Final Error Middleware
 app.use(require('./middleware/errorMiddleware'));
 
-// 3. Dynamic Port Logic for Cloud Deployment
 const PORT = process.env.PORT || 8080; 
 
 server.listen(PORT, '0.0.0.0', () => {
